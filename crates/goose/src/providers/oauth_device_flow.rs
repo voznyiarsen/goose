@@ -296,6 +296,7 @@ async fn send_request<T: Serialize + ?Sized>(
 }
 
 fn announce_user_action(device: &DeviceCodeResponse) {
+    #[cfg(not(target_os = "android"))]
     if let Ok(mut clipboard) = arboard::Clipboard::new() {
         if let Err(e) = clipboard.set_text(&device.user_code) {
             tracing::warn!("Failed to copy verification code to clipboard: {}", e);
