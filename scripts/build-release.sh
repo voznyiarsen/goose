@@ -22,6 +22,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CACHE_DIR="${HOME}/.cache/goose-build"
 export PATH="${CACHE_DIR}/bin:$PATH"
+export RUSTC_WRAPPER="${RUSTC_WRAPPER:-sccache}"
+export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
 
 TARGET="${1:-}"
 STRIP="${STRIP:-true}"
@@ -182,9 +184,12 @@ build_arm64() {
     --features portable-default,update
   if [[ "$STRIP" == "true" ]]; then
     # zigbuild already strips in --release, but ensure no debuginfo remains
-    zig objcopy --strip-debug \
-      "target/aarch64-unknown-linux-gnu/release/goose" \
-      "target/aarch64-unknown-linux-gnu/release/goose" 2>/dev/null || true
+    local tmpfile
+    tmpfile="$(mktemp)"
+    cp "target/aarch64-unknown-linux-gnu/release/goose" "$tmpfile"
+    zig objcopy --strip-debug "$tmpfile" "$tmpfile" 2>/dev/null || true
+    cp "$tmpfile" "target/aarch64-unknown-linux-gnu/release/goose"
+    rm -f "$tmpfile"
   fi
   mkdir -p "$OUTPUT_DIR"
   cp "target/aarch64-unknown-linux-gnu/release/goose" \
