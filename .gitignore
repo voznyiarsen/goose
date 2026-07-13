@@ -84,3 +84,10 @@ result
 # Goose self-test artifacts
 gooseselftest/
 .tasks/
+
+# Android NDK
+/android-ndk-r27c/
+/ndk/
+
+# Release build artifacts
+/release/
