@@ -56,6 +56,38 @@ curl -fsSL https://github.com/aaif-goose/goose/releases/download/stable/download
 > 
 > Because it always helps them "migrate" their code to production! 🚀
 
+# Building from source
+
+Prerequisites: Rust 1.94+ ([via rustup](https://rustup.rs)).
+
+```bash
+# Standard native build (current platform)
+cargo build --release -p goose-cli --bin goose
+
+# Cross-compile all targets (amd64, arm64 linux, android arm64)
+scripts/build-release.sh all
+
+# Individual targets
+scripts/build-release.sh amd64        # x86_64 linux, full features
+scripts/build-release.sh arm64        # aarch64 linux, portable features
+scripts/build-release.sh android      # aarch64 android, portable features
+```
+
+`release-arm64` and `release-android` auto-download the required toolchain
+(Android NDK, zig) to `~/.cache/goose-build/` on first run. The NDK can also
+be placed at the repo root in `android-ndk-r27c/` (gitignored).
+
+### Android known issue
+
+```
+Warning: Failed to save command history: lock() not supported
+```
+
+The CLI history file uses POSIX `flock()` which isn't available on Android
+filesystems. History won't persist between sessions. The CLI is otherwise
+fully functional. Set `RUSTYLINE_HISTORY_IGNORE_ERRORS=1` to suppress the
+warning or disable file history via environment (no env currently exposed).
+
 # goose around with us
 - [Discord](https://discord.gg/goose-oss)
 - [YouTube](https://www.youtube.com/@goose-oss)

@@ -1,4 +1,5 @@
 use super::completion::GooseCompleter;
+use super::portable_history::PortableHistory;
 use super::{CompletionCache, HintStatus};
 use anyhow::Result;
 use goose::config::{Config, GooseMode};
@@ -106,7 +107,7 @@ fn should_use_editor_always(
 }
 
 pub fn get_input(
-    editor: &mut Editor<GooseCompleter, rustyline::history::DefaultHistory>,
+    editor: &mut Editor<GooseCompleter, PortableHistory>,
     conversation_messages: Option<&Vec<String>>,
 ) -> Result<InputResult> {
     let config = Config::global();

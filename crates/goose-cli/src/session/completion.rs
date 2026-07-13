@@ -41,8 +41,8 @@ impl GooseCompleter {
             .flatten()
             .filter(|name| name.starts_with(prefix.trim()))
             .map(|name| Pair {
-                display: name.clone(),
-                replacement: name.clone(),
+                display: name.to_string(),
+                replacement: format!("{name} "),
             })
             .collect();
 
@@ -148,7 +148,96 @@ impl GooseCompleter {
 
     /// Complete model names for the /model command.
     fn complete_model_names(&self, line: &str) -> Result<(usize, Vec<Pair>)> {
-        Ok((line.len(), vec![]))
+        let cache = self.completion_cache.read().unwrap();
+
+        let partial = line
+            .strip_prefix("/model")
+            .unwrap_or("")
+            .trim()
+            .to_lowercase();
+
+        let pos = if line.contains(' ') {
+            line.rfind(' ').map(|i| i + 1).unwrap_or(line.len())
+        } else {
+            line.len()
+        };
+
+        let candidates: Vec<Pair> = cache
+            .models
+            .iter()
+            .filter(|name| partial.is_empty() || name.to_lowercase().contains(&partial))
+            .map(|name| Pair {
+                display: name.clone(),
+                replacement: format!("{name} "),
+            })
+            .collect();
+
+        Ok((pos, candidates))
+    }
+
+    /// Complete extension names for the /extension command.
+    fn complete_extension_names(&self, line: &str) -> Result<(usize, Vec<Pair>)> {
+        let cache = self.completion_cache.read().unwrap();
+
+        let partial = line
+            .strip_prefix("/extension")
+            .unwrap_or("")
+            .trim()
+            .to_lowercase();
+
+        let pos = line.rfind(' ').map(|i| i + 1).unwrap_or(line.len());
+
+        let candidates: Vec<Pair> = cache
+            .prompts
+            .keys()
+            .filter(|name| partial.is_empty() || name.to_lowercase().contains(&partial))
+            .map(|name| Pair {
+                display: name.clone(),
+                replacement: format!("{name} "),
+            })
+            .collect();
+
+        Ok((pos, candidates))
+    }
+
+    /// Complete builtin names for the /builtin command.
+    fn complete_builtin_names(&self, line: &str) -> Result<(usize, Vec<Pair>)> {
+        use goose::agents::execute_commands::list_commands;
+
+        let partial = line
+            .strip_prefix("/builtin")
+            .unwrap_or("")
+            .trim()
+            .to_lowercase();
+
+        let names: Vec<&str> = list_commands().iter().map(|c| c.name).collect();
+
+        let pos = line.rfind(' ').map(|i| i + 1).unwrap_or(line.len());
+
+        let candidates: Vec<Pair> = names
+            .iter()
+            .filter(|name| partial.is_empty() || name.to_lowercase().contains(&partial))
+            .map(|name| Pair {
+                display: (*name).to_string(),
+                replacement: format!("{name} "),
+            })
+            .collect();
+
+        Ok((pos, candidates))
+    }
+
+    /// Complete recipe names for the /recipe command.
+    fn complete_recipe_names(&self, line: &str, ctx: &Context) -> Result<(usize, Vec<Pair>)> {
+        let after_prefix = line.strip_prefix("/recipe").unwrap_or("");
+        if !after_prefix.starts_with(' ') {
+            return Ok((line.len(), vec![]));
+        }
+        let path_part = after_prefix.trim_start();
+        let file_pos = line.len() - path_part.len();
+        let (start, candidates) =
+            self.filename_completer
+                .complete(path_part, path_part.len(), ctx)?;
+        Ok((file_pos + start, candidates))
     }
 
     /// Complete slash commands
@@ -417,6 +506,31 @@ impl Completer for GooseCompleter {
                 return self.complete_skill_names(line);
             }
 
+            if line.starts_with("/edit") {
+                let after_prefix = line.strip_prefix("/edit").unwrap_or("");
+                if after_prefix.starts_with(' ') {
+                    let path_part = after_prefix.trim_start();
+                    let file_pos = line.len() - path_part.len();
+                    let (start, candidates) =
+                        self.filename_completer
+                            .complete(path_part, path_part.len(), ctx)?;
+                    return Ok((file_pos + start, candidates));
+                }
+                return Ok((pos, vec![]));
+            }
+
+            if line.starts_with("/extension ") {
+                return self.complete_extension_names(line);
+            }
+
+            if line.starts_with("/builtin ") {
+                return self.complete_builtin_names(line);
+            }
+
+            if line.starts_with("/recipe") {
+                return self.complete_recipe_names(line, ctx);
+            }
+
             return Ok((pos, vec![]));
         }
 
@@ -505,6 +619,12 @@ mod tests {
     // Helper function to create a test completion cache
     fn create_test_cache() -> Arc<RwLock<CompletionCache>> {
         let mut cache = CompletionCache::new();
+        cache.models = vec![
+            "gpt-4o".to_string(),
+            "gpt-4o-mini".to_string(),
+            "claude-sonnet-4-5".to_string(),
+            "gemini-2.5-pro".to_string(),
+        ];
 
         // Add some test prompts
         cache.prompts.insert(
@@ -603,11 +723,16 @@ mod tests {
 
         let (pos, candidates) = completer.complete_model_names("/model ").unwrap();
         assert_eq!(pos, "/model ".len());
-        assert!(candidates.is_empty());
+        assert_eq!(candidates.len(), 4);
 
         let (pos, candidates) = completer.complete_model_names("/model gpt").unwrap();
-        assert_eq!(pos, "/model gpt".len());
-        assert!(candidates.is_empty());
+        assert_eq!(pos, "/model ".len());
+        assert_eq!(candidates.len(), 2);
+
+        let (pos, candidates) = completer.complete_model_names("/model claude").unwrap();
+        assert_eq!(pos, "/model ".len());
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].display, "claude-sonnet-4-5");
     }
 
     #[test]

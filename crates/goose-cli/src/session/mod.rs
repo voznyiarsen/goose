@@ -5,6 +5,7 @@ mod elicitation;
 mod export;
 mod input;
 mod output;
+mod portable_history;
 pub mod streaming_buffer;
 mod task_execution_display;
 mod thinking;
@@ -46,6 +47,7 @@ use strum::VariantNames;
 
 use goose::config::paths::Paths;
 use goose::conversation::message::{ActionRequiredData, Message, MessageContent};
+use portable_history::PortableHistory;
 use rustyline::EditMode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -130,10 +132,7 @@ impl HistoryManager {
         }
     }
 
-    fn load(
-        &self,
-        editor: &mut rustyline::Editor<GooseCompleter, rustyline::history::DefaultHistory>,
-    ) {
+    fn load(&self, editor: &mut rustyline::Editor<GooseCompleter, PortableHistory>) {
         if let Some(parent) = self.history_file.parent() {
             if !parent.exists() {
                 if let Err(e) = std::fs::create_dir_all(parent) {
@@ -150,10 +149,7 @@ impl HistoryManager {
         }
     }
 
-    fn save(
-        &self,
-        editor: &mut rustyline::Editor<GooseCompleter, rustyline::history::DefaultHistory>,
-    ) {
+    fn save(&self, editor: &mut rustyline::Editor<GooseCompleter, PortableHistory>) {
         if let Err(err) = editor.save_history(&self.history_file) {
             eprintln!("Warning: Failed to save command history: {}", err);
         } else if self.old_history_file.exists() {
@@ -190,6 +186,7 @@ pub enum HintStatus {
 pub struct CompletionCache {
     pub prompts: HashMap<String, Vec<String>>,
     pub prompt_info: HashMap<String, output::PromptInfo>,
+    pub models: Vec<String>,
     pub last_updated: Instant,
     pub hint_status: HintStatus,
 }
@@ -199,6 +196,7 @@ impl CompletionCache {
         Self {
             prompts: HashMap::new(),
             prompt_info: HashMap::new(),
+            models: Vec::new(),
             last_updated: Instant::now(),
             hint_status: HintStatus::Default,
         }
@@ -544,9 +542,7 @@ impl CliSession {
         Ok(())
     }
 
-    fn create_editor(
-        &self,
-    ) -> Result<rustyline::Editor<GooseCompleter, rustyline::history::DefaultHistory>> {
+    fn create_editor(&self) -> Result<rustyline::Editor<GooseCompleter, PortableHistory>> {
         let builder =
             rustyline::Config::builder().completion_type(rustyline::CompletionType::Circular);
         let builder = match self.edit_mode {
@@ -554,10 +550,9 @@ impl CliSession {
             None => builder.edit_mode(EditMode::Emacs),
         };
         let config = builder.build();
+        let history = PortableHistory::with_config(&config);
         let mut editor =
-            rustyline::Editor::<GooseCompleter, rustyline::history::DefaultHistory>::with_config(
-                config,
-            )?;
+            rustyline::Editor::<GooseCompleter, PortableHistory>::with_history(config, history)?;
         let completer = GooseCompleter::new(self.completion_cache.clone());
         editor.set_helper(Some(completer));
         Ok(editor)
@@ -567,7 +562,7 @@ impl CliSession {
         &mut self,
         input: InputResult,
         history: &HistoryManager,
-        editor: &mut rustyline::Editor<GooseCompleter, rustyline::history::DefaultHistory>,
+        editor: &mut rustyline::Editor<GooseCompleter, PortableHistory>,
         conversation_messages: &[String],
     ) -> Result<()> {
         match input {
@@ -687,7 +682,7 @@ impl CliSession {
         &mut self,
         content: &str,
         history: &HistoryManager,
-        editor: &mut rustyline::Editor<GooseCompleter, rustyline::history::DefaultHistory>,
+        editor: &mut rustyline::Editor<GooseCompleter, PortableHistory>,
     ) -> Result<()> {
         match self.run_mode {
             RunMode::Normal => {
@@ -1520,10 +1515,23 @@ impl CliSession {
         // Get fresh data
         let prompts = self.agent.list_extension_prompts(&self.session_id).await;
 
+        // Get model names from the current provider
+        let model_info = self
+            .agent
+            .provider()
+            .await?
+            .fetch_supported_model_info()
+            .await
+            .unwrap_or_default();
+        let mut models: Vec<String> = model_info.into_iter().map(|m| m.name).collect();
+        models.sort();
+        models.dedup();
+
         // Update the cache with write lock
         let mut cache = self.completion_cache.write().unwrap();
         cache.prompts.clear();
         cache.prompt_info.clear();
+        cache.models = models;
 
         for (extension, prompt_list) in prompts {
             let names: Vec<String> = prompt_list.iter().map(|p| p.name.clone()).collect();
