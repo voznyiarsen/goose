@@ -23,7 +23,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CACHE_DIR="${HOME}/.cache/goose-build"
 export PATH="${CACHE_DIR}/bin:$PATH"
 export RUSTC_WRAPPER="${RUSTC_WRAPPER:-sccache}"
-export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
+: "${CARGO_BUILD_JOBS:=$(free -m | awk '/^Mem:/ {t=int($7/2048); print (t>0?t:1)}')}"
+export CARGO_BUILD_JOBS
 
 TARGET="${1:-}"
 STRIP="${STRIP:-true}"
