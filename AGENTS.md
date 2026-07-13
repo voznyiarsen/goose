@@ -85,22 +85,15 @@ ui/desktop/            # Electron app
 - Simplicity: Avoid overly defensive code - trust Rust's type system
 - Logging: Clean up existing logs, don't add more unless for errors or security events
 
-## Ink / Terminal UI (ui/text)
+## Native Terminal UI (`crates/goose-tui`)
 
-- Ink renders React to a fixed character grid — not a browser. Content that exceeds a Box's dimensions is NOT clipped; it visually overflows into neighboring cells and breaks the layout.
+- The `goose tui` command is a native Rust TUI built into the `goose` binary (the `goose-tui` crate, default `tui` feature in `goose-cli`). It replaces the old Node/Ink TUI; there is no npx/runtime dependency.
 
-- Ink-Text: Never use `wrap="wrap"` inside a fixed-height Box — wrapped text can exceed the Box height and bleed into adjacent components. Use `wrap="truncate"` and pre-truncate the string to fit the available character budget (lines × width).
-  
-- Ink-Layout: When changing card/cell dimensions, always recalculate how much content fits. Account for borders (2 chars), padding, margins, and sibling elements when computing the
-remaining space for dynamic text.
-  
-- Ink-Overflow: Ink has no `overflow: hidden`. The only way to prevent overflow is to ensure content never exceeds the container size — truncate text, limit list items, or cap height.
-  
-- Ink-FlexGrow: Avoid `flexGrow={1}` on text containers inside fixed-height cards — the text will try to fill available space but Ink won't clip it if it exceeds the boundary.
-  
-- Ink-HeightBudget: When computing how many rows/items fit vertically, count EVERY line used by headers, footers, margins, borders, and scroll indicators. Under-reserving vertical space (e.g., `height - 8` when chrome actually uses 16 lines) causes Ink to squeeze out margins between items, making borders collapse. Always audit the actual line count.
-  
-- Ink-TrailingMargin: Don't apply `marginBottom` to the last item in a list — it wastes a line and can push content out of the container. Use conditional margins or container `gap`.
+- Architecture: `tui` spawns `goose acp` as a child process and drives it over the Agent Client Protocol (stdio). The ACP connection future is `!Send`, so it runs on a `tokio::task::LocalSet` via `spawn_local`. Session/tool updates arrive as `AcpEvent`s; config and extension operations go through ACP custom requests (`ConfigReadAll`, `ConfigUpsert`, `GetConfigExtensions`, `GetAvailableExtensions`, `AddConfigExtension`, `RemoveConfigExtension`, `SetConfigExtensionEnabled`).
+
+- Rendering uses `ratatui` + `ratatui-textarea`. One logical content line maps to one rendered line; the viewport shows a tail of the current turn and truncates every line to the available width (truncate, never wrap) so manual scroll math stays correct. Respect the truncation-not-wrap discipline: when changing overlay/card dimensions, recompute how many rows fit and cap list items to the available height rather than letting content overflow.
+
+- Reuse ACP for config/extensions — do not re-implement config logic in the TUI. Permission requests from the ACP session are auto-approved. Provider/model switching persists via `GOOSE_PROVIDER`/`GOOSE_MODEL` config upsert followed by `NewSession`; full OAuth/key setup delegates to `goose configure` (temporarily leaves the alternate screen).
 
 ## Never
 

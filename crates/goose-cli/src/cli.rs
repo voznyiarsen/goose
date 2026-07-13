@@ -1051,15 +1051,14 @@ enum Command {
     #[cfg(feature = "tui")]
     #[command(
         about = "Launch the goose terminal UI",
-        long_about = "Launch the goose terminal UI (the @aaif/goose npm package).\n\
+        long_about = "Launch the goose terminal UI.\n\
                       \n\
-                      Resolution order:\n  \
-                      1. GOOSE_TUI_SCRIPT, if set to an existing dist/tui.js\n  \
-                      2. A local checkout's ui/text/dist/tui.js (dev workflow)\n  \
-                      3. `npx --yes --package <spec> -- goose-tui` (deployed installs)\n\
+                      The TUI is built into the goose binary: it spawns `goose acp`\n\
+                      as a child process and drives it over the Agent Client Protocol.\n\
+                      No external runtime (node/npx) is required.\n\
                       \n\
-                      Override the npm spec via GOOSE_TUI_NPM_SPEC (default: @aaif/goose@latest).\n\
-                      Local script mode requires `node` on PATH; npx mode requires `npx` on PATH.\n\
+                      Pass `-- TEXT` to send an initial prompt on launch, or use\n\
+                      `--text TEXT` for a single non-interactive response.\n\
                       Any extra arguments are passed through to the TUI."
     )]
     Tui {
@@ -2320,7 +2319,7 @@ pub async fn cli() -> anyhow::Result<()> {
         Some(Command::Plugin { command }) => handle_plugin_subcommand(command),
         Some(Command::Term { command }) => handle_term_subcommand(command).await,
         #[cfg(feature = "tui")]
-        Some(Command::Tui { args }) => crate::commands::tui::handle_tui(args),
+        Some(Command::Tui { args }) => crate::commands::tui::handle_tui(args).await,
         #[cfg(feature = "local-inference")]
         Some(Command::LocalModels { command }) => handle_local_models_command(command).await,
         Some(Command::Review {

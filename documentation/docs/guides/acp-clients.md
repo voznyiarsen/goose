@@ -181,19 +181,21 @@ For terminal-based workflows, goose provides a TUI (Terminal User Interface) cli
 
 ### Installation
 
+The TUI is built into the `goose` binary — there is no separate install or
+Node/npx runtime required:
+
 ```bash
-cd ui/text
-npm install
+cargo build --release   # or install goose through your package manager
 ```
 
 ### Running the TUI
 
-**Option 1: Auto-launch server (recommended)**
+**Option 1: Auto-launch server (default)**
 
-The TUI will automatically start the goose acp server if you have it installed:
+`goose tui` spawns `goose acp` as a child process and drives it over ACP:
 
 ```bash
-npm start
+goose tui
 ```
 
 **Option 2: Connect to a custom server**
@@ -201,7 +203,7 @@ npm start
 For servers that support the draft standard ACP over Streamable HTTP https://github.com/agentclientprotocol/agent-client-protocol/pull/721
 
 ```bash
-npm start -- --server http://HOST:PORT
+goose tui --server http://HOST:PORT
 
 # example server
 GOOSE_SERVER__SECRET_KEY='a-long-random-secret' cargo run -p goose-cli --bin goose -- serve
