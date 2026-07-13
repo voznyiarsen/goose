@@ -824,6 +824,20 @@ impl CliSession {
             return Ok(());
         }
 
+        // Reject model names the provider does not advertise. When the cache is
+        // empty (e.g. the provider doesn't expose a model list) we skip validation
+        // rather than blocking otherwise-valid names.
+        {
+            let cache = self.completion_cache.read().unwrap();
+            if !cache.models.is_empty() && !is_supported_model(&cache, model_name) {
+                output::render_error(&format!(
+                    "Model '{model_name}' is not a supported model for provider '{current_provider_name}'. \
+                     Run /model to see available models."
+                ));
+                return Ok(());
+            }
+        }
+
         if current_provider_name.ends_with("-acp") {
             output::render_error(
                 "Session model switching is not supported for ACP providers in the CLI.",
@@ -2325,6 +2339,20 @@ fn build_switched_model_config(
         .map_err(|e| anyhow::anyhow!("Failed to create model configuration: {e}"))
 }
 
+/// Returns true when `model_name` is advertised by the provider, tolerating
+/// OpenAI-style effort suffixes such as `o3-high`.
+fn is_supported_model(cache: &CompletionCache, model_name: &str) -> bool {
+    if cache.models.iter().any(|m| m == model_name) {
+        return true;
+    }
+    if let Some((base, suffix)) = model_name.rsplit_once('-') {
+        if matches!(suffix, "none" | "low" | "medium" | "high" | "xhigh") {
+            return cache.models.iter().any(|m| m == base);
+        }
+    }
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2522,6 +2550,29 @@ mod tests {
 
         assert_eq!(switched.model_name, current.model_name);
         assert_ne!(switched.thinking_effort(), current.thinking_effort());
+    }
+
+    #[test]
+    fn test_is_supported_model() {
+        let cache = CompletionCache {
+            models: vec![
+                "gpt-4o".to_string(),
+                "gpt-5.4".to_string(),
+                "o3".to_string(),
+            ],
+            ..CompletionCache::new()
+        };
+
+        assert!(is_supported_model(&cache, "gpt-4o"));
+        assert!(is_supported_model(&cache, "gpt-5.4"));
+        // OpenAI-style effort suffixes are tolerated.
+        assert!(is_supported_model(&cache, "o3-high"));
+        assert!(is_supported_model(&cache, "o3-low"));
+        // Unknown names are rejected.
+        assert!(!is_supported_model(&cache, "gpt-4"));
+        assert!(!is_supported_model(&cache, "claude-sonnet-4-5"));
+        // A non-effort suffix does not match the base name.
+        assert!(!is_supported_model(&cache, "gpt-4o-mini"));
     }
 
     #[test]
