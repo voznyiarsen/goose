@@ -25,6 +25,7 @@ pub enum InputResult {
     PromptCommand(PromptCommandOptions),
     GooseMode(String),
     Model(Option<String>),
+    Provider(Option<String>),
     Plan(PlanCommandOptions),
     EndPlan,
     Clear,
@@ -231,6 +232,8 @@ fn handle_slash_command(input: &str) -> Option<InputResult> {
     const CMD_MODE: &str = "/mode ";
     const CMD_MODEL: &str = "/model";
     const CMD_MODEL_WITH_SPACE: &str = "/model ";
+    const CMD_PROVIDER: &str = "/provider";
+    const CMD_PROVIDER_WITH_SPACE: &str = "/provider ";
     const CMD_PLAN: &str = "/plan";
     const CMD_ENDPLAN: &str = "/endplan";
     const CMD_CLEAR: &str = "/clear";
@@ -307,6 +310,19 @@ fn handle_slash_command(input: &str) -> Option<InputResult> {
                 Some(InputResult::Model(None))
             } else {
                 Some(InputResult::Model(Some(model)))
+            }
+        }
+        s if s == CMD_PROVIDER => Some(InputResult::Provider(None)),
+        s if s.starts_with(CMD_PROVIDER_WITH_SPACE) => {
+            let provider = s
+                .get(CMD_PROVIDER_WITH_SPACE.len()..)
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if provider.is_empty() {
+                Some(InputResult::Provider(None))
+            } else {
+                Some(InputResult::Provider(Some(provider)))
             }
         }
         s if s.starts_with(CMD_PLAN) => {
@@ -455,6 +471,7 @@ fn help_text() -> String {
 /prompt <n> [--info] [key=value...] - Get prompt info or execute a prompt
 /mode <name> - Set the goose mode to use ({modes})
 /model [name] - Show the current model, or switch models for this session while keeping the same provider
+/provider [name] - Show the current provider, or switch to a different provider
 /plan <message_text> -  Enters 'plan' mode with optional message. Create a plan based on the current messages and asks user if they want to act on it.
                         If user acts on the plan, goose mode is set to 'auto' and returns to 'normal' goose mode.
                         To warm up goose before using '/plan', we recommend setting '/mode approve' & putting appropriate context into goose.
@@ -585,6 +602,23 @@ mod tests {
             assert_eq!(model, "gpt-4.1");
         } else {
             panic!("Expected Model");
+        }
+
+        // Test provider command
+        assert!(matches!(
+            handle_slash_command("/provider"),
+            Some(InputResult::Provider(None))
+        ));
+        assert!(matches!(
+            handle_slash_command("/provider   "),
+            Some(InputResult::Provider(None))
+        ));
+        if let Some(InputResult::Provider(Some(provider))) =
+            handle_slash_command("/provider openrouter")
+        {
+            assert_eq!(provider, "openrouter");
+        } else {
+            panic!("Expected Provider");
         }
 
         // Test unknown commands

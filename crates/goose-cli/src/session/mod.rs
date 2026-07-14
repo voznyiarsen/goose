@@ -640,6 +640,10 @@ impl CliSession {
                 history.save(editor);
                 self.handle_model(model.as_deref()).await?;
             }
+            InputResult::Provider(provider) => {
+                history.save(editor);
+                self.handle_provider(provider.as_deref()).await?;
+            }
             InputResult::Plan(options) => {
                 self.handle_plan_mode(options).await?;
             }
@@ -911,6 +915,57 @@ impl CliSession {
         output::goose_mode_message(&format!(
             "Session model switched from '{}' to '{}' for provider '{}'",
             current_model_name, model_name, current_provider_name
+        ));
+        Ok(())
+    }
+
+    async fn handle_provider(&self, provider: Option<&str>) -> Result<()> {
+        let current_provider_name = self.agent.provider().await?.get_name().to_string();
+
+        if provider.is_none() {
+            output::goose_mode_message(&format!(
+                "Current session provider: '{}'",
+                current_provider_name
+            ));
+            return Ok(());
+        }
+
+        let provider_name = provider.unwrap_or_default().trim();
+        if provider_name.is_empty() {
+            output::render_error("Provider name cannot be empty");
+            return Ok(());
+        }
+
+        if provider_name == current_provider_name {
+            output::goose_mode_message(&format!(
+                "Session already using provider '{}'",
+                current_provider_name
+            ));
+            return Ok(());
+        }
+
+        let config = Config::global();
+        config.set_goose_provider(provider_name)?;
+
+        let model = config.get_goose_model().unwrap_or_default();
+        let model_config =
+            goose::model_config::model_config_from_user_config(provider_name, &model)
+                .map_err(|e| anyhow::anyhow!("Failed to create model config: {e}"))?;
+
+        let extensions = self.agent.get_extension_configs().await;
+        let new_provider = goose::providers::create(provider_name, extensions)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to create provider: {e}"))?;
+
+        self.agent
+            .update_provider(new_provider, model_config, &self.session_id)
+            .await?;
+
+        let mode = self.agent.goose_mode().await;
+        self.agent.update_goose_mode(mode, &self.session_id).await?;
+        output::goose_mode_message(&format!(
+            "Session provider switched from '{}' to '{}'",
+            current_provider_name, provider_name
         ));
         Ok(())
     }
