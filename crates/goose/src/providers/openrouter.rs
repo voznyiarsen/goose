@@ -55,6 +55,9 @@ impl OpenRouterProvider {
     ) -> Result<Self> {
         let config = crate::config::Config::global();
         let api_key: String = config.get_secret("OPENROUTER_API_KEY")?;
+        if api_key.is_empty() {
+            anyhow::bail!("OPENROUTER_API_KEY is empty. Please configure it via `goose configure` or set the OPENROUTER_API_KEY environment variable.");
+        }
         let host: String = config
             .get_param("OPENROUTER_HOST")
             .unwrap_or_else(|_| "https://openrouter.ai".to_string());

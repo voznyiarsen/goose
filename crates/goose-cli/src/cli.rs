@@ -18,6 +18,7 @@ use crate::commands::configure::handle_configure;
 use crate::commands::info::handle_info;
 use crate::commands::plugin::{handle_plugin_install, handle_plugin_update};
 use crate::commands::project::{handle_project_default, handle_projects_interactive};
+use crate::commands::provider::handle_provider;
 use crate::commands::recipe::{handle_deeplink, handle_list, handle_open, handle_validate};
 use crate::commands::term::{
     handle_term_info, handle_term_init, handle_term_log, handle_term_run, Shell,
@@ -948,6 +949,13 @@ enum Command {
     #[command(about = "List recent project directories", visible_alias = "ps")]
     Projects,
 
+    /// Switch the active provider
+    #[command(about = "Switch the active provider")]
+    Provider {
+        /// Provider name to switch to
+        provider: Option<String>,
+    },
+
     /// Execute commands from an instruction file
     #[command(about = "Execute commands from an instruction file or stdin")]
     Run {
@@ -1045,26 +1053,6 @@ enum Command {
     Term {
         #[command(subcommand)]
         command: TermCommand,
-    },
-
-    /// Launch the goose terminal UI (TUI)
-    #[cfg(feature = "tui")]
-    #[command(
-        about = "Launch the goose terminal UI",
-        long_about = "Launch the goose terminal UI.\n\
-                      \n\
-                      The TUI is built into the goose binary: it spawns `goose acp`\n\
-                      as a child process and drives it over the Agent Client Protocol.\n\
-                      No external runtime (node/npx) is required.\n\
-                      \n\
-                      Pass `-- TEXT` to send an initial prompt on launch, or use\n\
-                      `--text TEXT` for a single non-interactive response.\n\
-                      Any extra arguments are passed through to the TUI."
-    )]
-    Tui {
-        /// Arguments forwarded to the TUI
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
     },
 
     /// Manage local inference models
@@ -1351,10 +1339,9 @@ fn get_command_name(command: &Option<Command>) -> &'static str {
         Some(Command::Update { .. }) => "update",
         Some(Command::Recipe { .. }) => "recipe",
         Some(Command::Skills { .. }) => "skills",
+        Some(Command::Provider { .. }) => "provider",
         Some(Command::Plugin { .. }) => "plugin",
         Some(Command::Term { .. }) => "term",
-        #[cfg(feature = "tui")]
-        Some(Command::Tui { .. }) => "tui",
         #[cfg(feature = "local-inference")]
         Some(Command::LocalModels { .. }) => "local-models",
         Some(Command::Completion { .. }) => "completion",
@@ -2316,10 +2303,9 @@ pub async fn cli() -> anyhow::Result<()> {
         }
         Some(Command::Recipe { command }) => handle_recipe_subcommand(command),
         Some(Command::Skills { command }) => handle_skills_subcommand(command).await,
+        Some(Command::Provider { provider }) => handle_provider(provider).await,
         Some(Command::Plugin { command }) => handle_plugin_subcommand(command),
         Some(Command::Term { command }) => handle_term_subcommand(command).await,
-        #[cfg(feature = "tui")]
-        Some(Command::Tui { args }) => crate::commands::tui::handle_tui(args).await,
         #[cfg(feature = "local-inference")]
         Some(Command::LocalModels { command }) => handle_local_models_command(command).await,
         Some(Command::Review {
@@ -2551,18 +2537,6 @@ mod tests {
                 assert_eq!(severity, "low");
             }
             _ => panic!("expected review command"),
-        }
-    }
-
-    #[cfg(feature = "tui")]
-    #[test]
-    fn tui_command_accepts_trailing_args() {
-        let cli =
-            Cli::try_parse_from(["goose", "tui", "--", "--theme", "dark"]).expect("parse failed");
-
-        match cli.command {
-            Some(Command::Tui { args }) => assert_eq!(args, vec!["--theme", "dark"]),
-            _ => panic!("expected tui command"),
         }
     }
 }

@@ -252,6 +252,7 @@ impl GooseCompleter {
             "/builtin".to_string(),
             "/mode".to_string(),
             "/model".to_string(),
+            "/provider".to_string(),
             "/recipe".to_string(),
         ];
         commands.extend(
