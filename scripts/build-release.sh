@@ -114,7 +114,9 @@ setup_zig() {
 }
 
 setup_ndk() {
-  NDK_DIR="${CACHE_DIR}/android-ndk-r27c"
+  # Allow pointing at a locally-provided NDK (e.g. checked into the repo) via
+  # ANDROID_NDK_DIR; otherwise fall back to the download cache.
+  NDK_DIR="${ANDROID_NDK_DIR:-${CACHE_DIR}/android-ndk-r27c}"
   NDK_BIN="${NDK_DIR}/toolchains/llvm/prebuilt/linux-x86_64/bin"
 
   if [[ -d "$NDK_BIN" ]]; then
