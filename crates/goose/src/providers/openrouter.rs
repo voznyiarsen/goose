@@ -38,6 +38,37 @@ pub const OPENROUTER_KNOWN_MODELS: &[&str] = &[
 ];
 pub const OPENROUTER_DOC_URL: &str = "https://openrouter.ai/models";
 
+/// Normalize an OpenRouter API key read from config/env before using it for auth.
+///
+/// Strips surrounding whitespace and a single pair of matching quotes, and
+/// removes an optional `Bearer `/`Bearer:` prefix (case-insensitive) in case the
+/// value was pasted with the scheme included.
+fn normalize_openrouter_key(raw: &str) -> String {
+    let trimmed = raw.trim();
+    let unquoted = if trimmed.len() >= 2 {
+        let first = trimmed.chars().next().unwrap();
+        let last = trimmed.chars().last().unwrap();
+        if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
+            trimmed.get(1..trimmed.len() - 1).unwrap_or(trimmed).trim()
+        } else {
+            trimmed
+        }
+    } else {
+        trimmed
+    };
+
+    let lower = unquoted.to_ascii_lowercase();
+    let prefix_stripped = if lower.starts_with("bearer ") {
+        unquoted.get("bearer ".len()..).unwrap_or(unquoted)
+    } else if lower.starts_with("bearer:") {
+        unquoted.get("bearer:".len()..).unwrap_or(unquoted)
+    } else {
+        unquoted
+    };
+
+    prefix_stripped.trim().to_string()
+}
+
 #[derive(serde::Serialize)]
 pub struct OpenRouterProvider {
     #[serde(skip)]
@@ -54,9 +85,10 @@ impl OpenRouterProvider {
         tls_config: Option<crate::providers::api_client::TlsConfig>,
     ) -> Result<Self> {
         let config = crate::config::Config::global();
-        let api_key: String = config.get_secret("OPENROUTER_API_KEY")?;
+        let raw_key: String = config.get_secret("OPENROUTER_API_KEY")?;
+        let api_key = normalize_openrouter_key(&raw_key);
         if api_key.is_empty() {
-            anyhow::bail!("OPENROUTER_API_KEY is empty. Please configure it via `goose configure` or set the OPENROUTER_API_KEY environment variable.");
+            anyhow::bail!("OPENROUTER_API_KEY is missing or empty. Configure it via `goose configure` or set the OPENROUTER_API_KEY environment variable.");
         }
         let host: String = config
             .get_param("OPENROUTER_HOST")
@@ -383,6 +415,33 @@ mod tests {
             .config_keys
             .iter()
             .any(|key| key.name == OPENROUTER_PARAMETERS_CONFIG_KEY));
+    }
+
+    #[test]
+    fn normalize_openrouter_key_trims_whitespace() {
+        assert_eq!(normalize_openrouter_key("  sk-abc  "), "sk-abc");
+        assert_eq!(normalize_openrouter_key("\nsk-abc\n"), "sk-abc");
+    }
+
+    #[test]
+    fn normalize_openrouter_key_strips_surrounding_quotes() {
+        assert_eq!(normalize_openrouter_key("\"sk-abc\""), "sk-abc");
+        assert_eq!(normalize_openrouter_key("'sk-abc'"), "sk-abc");
+        assert_eq!(normalize_openrouter_key("  \"sk-abc\"  "), "sk-abc");
+    }
+
+    #[test]
+    fn normalize_openrouter_key_strips_bearer_prefix() {
+        assert_eq!(normalize_openrouter_key("Bearer sk-abc"), "sk-abc");
+        assert_eq!(normalize_openrouter_key("bearer: sk-abc"), "sk-abc");
+        assert_eq!(normalize_openrouter_key("BEARER sk-abc "), "sk-abc");
+        assert_eq!(normalize_openrouter_key("\"Bearer sk-abc\""), "sk-abc");
+    }
+
+    #[test]
+    fn normalize_openrouter_key_collapses_whitespace_only_to_empty() {
+        assert_eq!(normalize_openrouter_key("   "), "");
+        assert_eq!(normalize_openrouter_key("\"\""), "");
     }
 
     #[test]

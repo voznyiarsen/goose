@@ -37,7 +37,7 @@ fn parse_providers_map(raw: Mapping) -> IndexMap<String, ProviderEntry> {
     map
 }
 
-fn get_providers_map(config: &Config) -> IndexMap<String, ProviderEntry> {
+pub fn get_providers_map(config: &Config) -> IndexMap<String, ProviderEntry> {
     let raw: Mapping = config
         .get_param(PROVIDERS_CONFIG_KEY)
         .unwrap_or_else(|_| Default::default());

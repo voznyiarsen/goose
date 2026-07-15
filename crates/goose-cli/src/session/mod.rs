@@ -39,6 +39,7 @@ use goose::agents::extension::{Envs, ExtensionConfig, PLATFORM_EXTENSIONS};
 use goose::agents::types::RetryConfig;
 use goose::agents::{Agent, SessionConfig, COMPACT_TRIGGERS};
 use goose::config::extensions::name_to_key;
+use goose::config::providers::get_providers_map;
 use goose::config::{Config, GooseMode};
 use input::InputResult;
 use rmcp::model::ServerNotification;
@@ -834,6 +835,34 @@ impl CliSession {
     }
 
     async fn handle_model(&self, model: Option<&str>) -> Result<()> {
+        let current_provider_name = self.agent.provider().await?.get_name().to_string();
+        let current_model_config = self
+            .agent
+            .model_config_for_session(&self.session_id)
+            .await?;
+        let current_model_name = current_model_config.model_name.clone();
+
+        let model_name = match model {
+            Some(name) => name.to_string(),
+            None => match self
+                .select_model_interactively(&current_provider_name, &current_model_name)
+                .await?
+            {
+                Some(name) => name,
+                None => return Ok(()),
+            },
+        };
+
+        if model_name.trim().is_empty() {
+            return Ok(());
+        }
+
+        self.switch_model(&model_name).await
+    }
+
+    /// Switch the active model, performing the same validation used for the
+    /// direct `/model <name>` path.
+    async fn switch_model(&self, model_name: &str) -> Result<()> {
         let provider = self.agent.provider().await?;
         let current_provider_name = provider.get_name().to_string();
         let current_model_config = self
@@ -842,15 +871,7 @@ impl CliSession {
             .await?;
         let current_model_name = current_model_config.model_name.clone();
 
-        if model.is_none() {
-            output::goose_mode_message(&format!(
-                "Current session model: '{}' (provider '{}')",
-                current_model_name, current_provider_name
-            ));
-            return Ok(());
-        }
-
-        let model_name = model.unwrap_or_default().trim();
+        let model_name = model_name.trim();
         if model_name.is_empty() {
             output::render_error("Model name cannot be empty");
             return Ok(());
@@ -919,18 +940,96 @@ impl CliSession {
         Ok(())
     }
 
+    /// Present a searchable dropdown of the current provider's full model
+    /// catalog, with an escape hatch to type a model name manually.
+    /// Returns `None` if the user cancelled.
+    async fn select_model_interactively(
+        &self,
+        _provider_name: &str,
+        current: &str,
+    ) -> Result<Option<String>> {
+        let provider = self.agent.provider().await?;
+
+        let spinner = cliclack::spinner();
+        spinner.start("Fetching available models...");
+        let models = match provider.fetch_supported_models().await {
+            Ok(models) => models,
+            Err(e) => {
+                spinner.stop(format!("Could not fetch models: {e}"));
+                return self.prompt_manual_model();
+            }
+        };
+        spinner.stop("Models loaded");
+
+        if models.is_empty() {
+            return self.prompt_manual_model();
+        }
+
+        let mut items: Vec<(String, String, String)> = models
+            .into_iter()
+            .map(|m| (m.clone(), m.clone(), String::new()))
+            .collect();
+
+        let other_key = "__other_model__".to_string();
+        items.push((
+            other_key.clone(),
+            "Other (enter manually)...".to_string(),
+            String::new(),
+        ));
+
+        let selection = match cliclack::select("Select a model:")
+            .items(&items)
+            .initial_value(current.to_string())
+            .filter_mode()
+            .interact()
+        {
+            Ok(selection) => selection,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => return Ok(None),
+            Err(e) => return Err(e.into()),
+        };
+
+        if selection == other_key {
+            return self.prompt_manual_model();
+        }
+        Ok(Some(selection))
+    }
+
+    /// Prompt for a model name by hand; `None` if cancelled.
+    fn prompt_manual_model(&self) -> Result<Option<String>> {
+        match cliclack::input("Enter model name:").interact() {
+            Ok(name) => Ok(Some(name)),
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     async fn handle_provider(&self, provider: Option<&str>) -> Result<()> {
         let current_provider_name = self.agent.provider().await?.get_name().to_string();
 
-        if provider.is_none() {
-            output::goose_mode_message(&format!(
-                "Current session provider: '{}'",
-                current_provider_name
-            ));
+        let provider_name = match provider {
+            Some(name) => name.to_string(),
+            None => match self
+                .select_provider_interactively(&current_provider_name)
+                .await?
+            {
+                Some(name) => name,
+                None => return Ok(()),
+            },
+        };
+
+        if provider_name.trim().is_empty() {
             return Ok(());
         }
 
-        let provider_name = provider.unwrap_or_default().trim();
+        self.switch_provider(&provider_name).await
+    }
+
+    /// Switch the active provider, performing the same logic used for the
+    /// direct `/provider <name>` path.
+    async fn switch_provider(&self, provider_name: &str) -> Result<()> {
+        let current_provider_name = self.agent.provider().await?.get_name().to_string();
+
+        let provider_name = provider_name.trim();
         if provider_name.is_empty() {
             output::render_error("Provider name cannot be empty");
             return Ok(());
@@ -968,6 +1067,81 @@ impl CliSession {
             current_provider_name, provider_name
         ));
         Ok(())
+    }
+
+    /// Show configured providers in a searchable dropdown, with an option to
+    /// expand to the full provider catalog (including unconfigured providers).
+    /// Returns `None` if the user cancelled.
+    async fn select_provider_interactively(&self, current: &str) -> Result<Option<String>> {
+        let config = Config::global();
+        let configured = get_providers_map(config);
+
+        if configured.is_empty() {
+            return self.select_from_all_providers(current).await;
+        }
+
+        let mut items: Vec<(String, String, String)> = configured
+            .keys()
+            .map(|name| {
+                let desc = if name == current {
+                    "currently active".to_string()
+                } else {
+                    String::new()
+                };
+                (name.clone(), name.clone(), desc)
+            })
+            .collect();
+
+        let show_all_key = "__show_all_providers__".to_string();
+        items.push((
+            show_all_key.clone(),
+            "Show all providers...".to_string(),
+            "Include providers not yet configured".to_string(),
+        ));
+
+        let selection = match cliclack::select("Switch provider:")
+            .items(&items)
+            .initial_value(current.to_string())
+            .filter_mode()
+            .interact()
+        {
+            Ok(selection) => selection,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => return Ok(None),
+            Err(e) => return Err(e.into()),
+        };
+
+        if selection == show_all_key {
+            return self.select_from_all_providers(current).await;
+        }
+        Ok(Some(selection))
+    }
+
+    /// Searchable dropdown over every registered provider.
+    async fn select_from_all_providers(&self, current: &str) -> Result<Option<String>> {
+        let providers = goose::providers::providers().await;
+        let items: Vec<(String, String, String)> = providers
+            .iter()
+            .map(|(meta, _)| {
+                let desc = if meta.name == current {
+                    "currently active".to_string()
+                } else {
+                    meta.description.clone()
+                };
+                (meta.name.clone(), meta.display_name.clone(), desc)
+            })
+            .collect();
+
+        let selection = match cliclack::select("Switch provider:")
+            .items(&items)
+            .initial_value(current.to_string())
+            .filter_mode()
+            .interact()
+        {
+            Ok(selection) => selection,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => return Ok(None),
+            Err(e) => return Err(e.into()),
+        };
+        Ok(Some(selection))
     }
 
     async fn handle_plan_mode(&mut self, options: input::PlanCommandOptions) -> Result<()> {

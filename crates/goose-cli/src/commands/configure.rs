@@ -668,6 +668,27 @@ fn prompt_unlisted_model(
     Ok(model.trim().to_string())
 }
 
+/// Normalize a value collected during `goose configure` before persisting it.
+///
+/// Trims surrounding whitespace and strips a single pair of matching quotes so
+/// keys/URLs pasted with trailing newlines, spaces, or quotes are stored
+/// cleanly. An all-whitespace value collapses to empty.
+fn normalize_config_input(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.len() >= 2 {
+        let first = trimmed.chars().next().unwrap();
+        let last = trimmed.chars().last().unwrap();
+        if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
+            return trimmed
+                .get(1..trimmed.len() - 1)
+                .unwrap_or(trimmed)
+                .trim()
+                .to_string();
+        }
+    }
+    trimmed.to_string()
+}
+
 fn try_store_secret(config: &Config, key_name: &str, value: String) -> anyhow::Result<bool> {
     match config.set_secret(key_name, &value) {
         Ok(_) => Ok(true),
@@ -688,7 +709,10 @@ async fn configure_single_key(
     display_name: &str,
     key: &ConfigKey,
 ) -> anyhow::Result<bool> {
-    let from_env = std::env::var(&key.name).ok();
+    let from_env = std::env::var(&key.name)
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .map(|v| normalize_config_input(&v));
 
     match from_env {
         Some(env_value) => {
@@ -733,6 +757,7 @@ async fn configure_single_key(
                                 }
                                 input.interact()?
                             };
+                            let value = normalize_config_input(&value);
 
                             if key.secret {
                                 if !try_store_secret(config, &key.name, value)? {
@@ -759,6 +784,7 @@ async fn configure_single_key(
                                 cliclack::password(format!("Enter value for {}", key.name))
                                     .mask('▪')
                                     .interact()?;
+                            let value = normalize_config_input(&value);
                             if !try_store_secret(config, &key.name, value)? {
                                 return Ok(false);
                             }
@@ -785,6 +811,7 @@ async fn configure_single_key(
                             }
                             input.interact()?
                         };
+                        let value = normalize_config_input(&value);
 
                         if value.is_empty() {
                             return Ok(true);
@@ -2326,6 +2353,7 @@ mod tests {
     use super::*;
 
     #[test]
+<<<<<<< HEAD
     fn selected_item_inside_visible_window_keeps_order() {
         let mut items: Vec<_> = (0..MAX_PROVIDER_ROWS + 1).collect();
         let expected = items.clone();
@@ -2375,5 +2403,36 @@ mod tests {
         let filtered = fuzzy_filter_provider_items(&items, "open ai");
 
         assert_eq!(filtered.first().map(|item| item.0.as_str()), Some("openai"));
+    }
+
+    #[test]
+    fn normalize_config_input_trims_whitespace() {
+        assert_eq!(normalize_config_input("  sk-abc  "), "sk-abc");
+        assert_eq!(normalize_config_input("\nsk-abc\n"), "sk-abc");
+    }
+
+    #[test]
+    fn normalize_config_input_strips_surrounding_quotes() {
+        assert_eq!(normalize_config_input("\"sk-abc\""), "sk-abc");
+        assert_eq!(normalize_config_input("'sk-abc'"), "sk-abc");
+        assert_eq!(normalize_config_input("  \"sk-abc\"  "), "sk-abc");
+    }
+
+    #[test]
+    fn normalize_config_input_collapses_whitespace_only_to_empty() {
+        assert_eq!(normalize_config_input("   "), "");
+        assert_eq!(normalize_config_input("\"\""), "");
+    }
+
+    #[test]
+    fn normalize_config_input_keeps_internal_content() {
+        assert_eq!(
+            normalize_config_input("https://openrouter.ai"),
+            "https://openrouter.ai"
+        );
+        assert_eq!(
+            normalize_config_input("  https://openrouter.ai  "),
+            "https://openrouter.ai"
+        );
     }
 }

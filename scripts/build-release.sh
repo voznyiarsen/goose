@@ -208,7 +208,7 @@ build_android() {
 
   cargo build --release -p goose-cli --bin goose \
     --no-default-features \
-    --features tui,aws-providers,telemetry,otel,rustls-tls,update
+    --features aws-providers,telemetry,otel,rustls-tls,update
 
   if [[ "$STRIP" == "true" ]]; then
     "${NDK_TOOLCHAIN}/llvm-strip" target/aarch64-linux-android/release/goose
