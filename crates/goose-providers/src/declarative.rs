@@ -24,6 +24,7 @@ pub(crate) mod declarative_providers {
         iflytek,
         iflytek_astron,
         inception,
+        llama_cpp,
         llama_swap,
         lmstudio,
         meta,

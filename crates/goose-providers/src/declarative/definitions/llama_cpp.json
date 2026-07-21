@@ -1,0 +1,23 @@
+{
+  "name": "llama_cpp",
+  "engine": "openai",
+  "display_name": "llama.cpp",
+  "description": "Run local models with llama.cpp OpenAI-compatible server",
+  "api_key_env": "LLAMA_CPP_API_KEY",
+  "base_url": "${LLAMA_CPP_HOST}/v1/chat/completions",
+  "env_vars": [
+    {
+      "name": "LLAMA_CPP_HOST",
+      "required": false,
+      "secret": false,
+      "primary": true,
+      "default": "http://localhost:8080",
+      "description": "Base URL of the llama.cpp server (default: http://localhost:8080)"
+    }
+  ],
+  "dynamic_models": true,
+  "models": [],
+  "supports_streaming": true,
+  "requires_auth": false,
+  "skip_canonical_filtering": true
+}
