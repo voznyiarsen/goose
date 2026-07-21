@@ -1,0 +1,81 @@
+name: "Build Release Binaries"
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-x86_64:
+    name: Build x86_64 Linux
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: x86_64-unknown-linux-gnu
+      - name: Build
+        run: |
+          cargo build --release -p goose-cli --bin goose
+      - uses: actions/upload-artifact@v4
+        with:
+          name: goose-x86_64-linux
+          path: target/release/goose
+
+  build-aarch64:
+    name: Build aarch64 Linux
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: aarch64-unknown-linux-gnu
+      - name: Build
+        run: |
+          cargo build --release -p goose-cli --bin goose
+      - uses: actions/upload-artifact@v4
+        with:
+          name: goose-aarch64-linux
+          path: target/release/goose
+
+  build-android:
+    name: Build aarch64 Android
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Setup NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r29
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: aarch64-linux-android
+      - name: Build
+        run: |
+          export CC_aarch64_linux_android="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang"
+          export CXX_aarch64_linux_android="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang++"
+          export AR_aarch64_linux_android="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="${CC_aarch64_linux_android}"
+          export CFLAGS_aarch64_linux_android="-Dindex=strchr -D__USE_MISC"
+          cargo build --release --target aarch64-linux-android -p goose-cli --bin goose \
+            --no-default-features \
+            --features tui,aws-providers,telemetry,otel,rustls-tls,update
+      - uses: actions/upload-artifact@v4
+        with:
+          name: goose-aarch64-android
+          path: target/aarch64-linux-android/release/goose
