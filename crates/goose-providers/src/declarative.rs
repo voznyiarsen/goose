@@ -49,6 +49,7 @@ pub(crate) mod declarative_providers {
         together,
         venice,
         vercel_ai_gateway,
+        vllm,
         zai,
         zhipu,
     );

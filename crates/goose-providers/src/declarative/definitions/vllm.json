@@ -1,0 +1,23 @@
+{
+  "name": "vllm",
+  "engine": "openai",
+  "display_name": "vLLM",
+  "description": "Run local models with vLLM OpenAI-compatible server",
+  "api_key_env": "VLLM_API_KEY",
+  "base_url": "${VLLM_HOST}/v1/chat/completions",
+  "env_vars": [
+    {
+      "name": "VLLM_HOST",
+      "required": false,
+      "secret": false,
+      "primary": true,
+      "default": "http://localhost:8000",
+      "description": "Base URL of the vLLM server (default: http://localhost:8000)"
+    }
+  ],
+  "dynamic_models": true,
+  "models": [],
+  "supports_streaming": true,
+  "requires_auth": false,
+  "skip_canonical_filtering": true
+}
