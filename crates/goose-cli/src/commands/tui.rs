@@ -13,14 +13,11 @@ pub async fn handle_tui(args: Vec<String>) -> Result<()> {
     ) {
         Ok(a) => a,
         Err(e) => {
-            // clap errors (e.g. --help) are user-facing; print and return.
             eprintln!("{e}");
             return Ok(());
         }
     };
 
-    // The ACP connection future is `!Send`, so it runs on a LocalSet via
-    // `spawn_local`. The caller (`run`) is already inside a Tokio runtime.
     let local = LocalSet::new();
     local.run_until(goose_tui::run(tui_args)).await
 }

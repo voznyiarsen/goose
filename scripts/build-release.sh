@@ -22,6 +22,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CACHE_DIR="${HOME}/.cache/goose-build"
 export PATH="${CACHE_DIR}/bin:$PATH"
+export RUSTC_WRAPPER="${RUSTC_WRAPPER:-sccache}"
+: "${CARGO_BUILD_JOBS:=$(free -m | awk '/^Mem:/ {t=int($7/2048); print (t>0?t:1)}')}"
+export CARGO_BUILD_JOBS
 
 TARGET="${1:-}"
 STRIP="${STRIP:-true}"
@@ -114,22 +117,20 @@ setup_zig() {
 }
 
 setup_ndk() {
-  # Allow pointing at a locally-provided NDK (e.g. checked into the repo) via
-  # ANDROID_NDK_DIR; otherwise fall back to the download cache.
-  NDK_DIR="${ANDROID_NDK_DIR:-${CACHE_DIR}/android-ndk-r27c}"
+  NDK_DIR="${CACHE_DIR}/android-ndk-r29"
   NDK_BIN="${NDK_DIR}/toolchains/llvm/prebuilt/linux-x86_64/bin"
 
   if [[ -d "$NDK_BIN" ]]; then
-    ok "Android NDK r27c cached at $NDK_DIR"
+    ok "Android NDK r29 cached at $NDK_DIR"
     export NDK_HOME="$NDK_DIR"
     export NDK_TOOLCHAIN="$NDK_BIN"
     return
   fi
 
-  info "downloading Android NDK r27c ..."
+  info "downloading Android NDK r29 ..."
   mkdir -p "$CACHE_DIR"
-  NDK_ZIP="${CACHE_DIR}/android-ndk-r27c-linux.zip"
-  NDK_URL="https://dl.google.com/android/repository/android-ndk-r27c-linux.zip"
+  NDK_ZIP="${CACHE_DIR}/android-ndk-r29-linux.zip"
+  NDK_URL="https://dl.google.com/android/repository/android-ndk-r29-linux.zip"
 
   curl -fsSL --connect-timeout 10 --max-time 600 -o "$NDK_ZIP" "$NDK_URL" || \
     die "failed to download NDK from $NDK_URL"
@@ -142,7 +143,7 @@ setup_ndk() {
 
   export NDK_HOME="$NDK_DIR"
   export NDK_TOOLCHAIN="$NDK_BIN"
-  ok "Android NDK r27c ready at $NDK_DIR"
+  ok "Android NDK r29 ready at $NDK_DIR"
 }
 
 setup_android_env() {
@@ -183,10 +184,12 @@ build_arm64() {
     --no-default-features \
     --features portable-default,update
   if [[ "$STRIP" == "true" ]]; then
-    # zigbuild already strips in --release, but ensure no debuginfo remains
-    zig objcopy --strip-debug \
-      "target/aarch64-unknown-linux-gnu/release/goose" \
-      "target/aarch64-unknown-linux-gnu/release/goose" 2>/dev/null || true
+    local tmpfile
+    tmpfile="$(mktemp)"
+    cp "target/aarch64-unknown-linux-gnu/release/goose" "$tmpfile"
+    zig objcopy --strip-debug "$tmpfile" "$tmpfile" 2>/dev/null || true
+    cp "$tmpfile" "target/aarch64-unknown-linux-gnu/release/goose"
+    rm -f "$tmpfile"
   fi
   mkdir -p "$OUTPUT_DIR"
   cp "target/aarch64-unknown-linux-gnu/release/goose" \

@@ -8,7 +8,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2021"
-version = "1.42.0"
+version = "1.44.0"
 rust-version = "1.94.1"
 authors = ["AAIF <ai-oss-tools@block.xyz>"]
 license = "Apache-2.0"
@@ -69,7 +69,6 @@ tracing-appender = { version = "0.2.1", default-features = false }
 tracing-futures = { version = "0.2.4", default-features = false, features = ["futures-03", "std", "std-future"] }
 tracing-subscriber = { version = "0.3.22", default-features = false, features = ["std"] }
 urlencoding = { version = "2.1", default-features = false }
-utoipa = { version = "4.2", default-features = false }
 uuid = { version = "1.23", default-features = false, features = ["v4", "std"] }
 webbrowser = { version = "1", default-features = false }
 which = { version = "8", default-features = false, features = ["real-sys"] }
@@ -114,9 +113,6 @@ icu_locale = { version = "=2.1.1", default-features = false }
 [patch.crates-io]
 v8 = { path = "vendor/v8" }
 cudaforge = { git = "https://github.com/jbg/cudaforge", rev = "e7c1967340e40673db98dc9e17da0f04834a456f" }
-# Android-only fix: when the platform certificate verifier can't be
-# initialized (e.g. Termux, which has no JVM/Context), fall back to the
-# bundled Mozilla root store instead of panicking. See vendor/rustls-platform-verifier.
 rustls-platform-verifier = { path = "vendor/rustls-platform-verifier" }
 
 # Dependencies don't need debug info. You rarely step-debug into third-party
