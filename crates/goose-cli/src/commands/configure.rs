@@ -618,6 +618,7 @@ fn select_model_from_list(
 
             let selection = cliclack::select("Select a model:")
                 .items(&model_items)
+                .filter_mode()
                 .interact()?;
 
             if selection == "search_all" {
@@ -642,6 +643,7 @@ fn select_model_from_list(
 
         let selection = cliclack::select("Select a model:")
             .items(&model_items)
+            .filter_mode()
             .interact()?;
 
         if selection == UNLISTED_MODEL_KEY {
@@ -2270,6 +2272,7 @@ fn add_provider() -> anyhow::Result<()> {
             .collect();
         if let Ok(model) = cliclack::select("Which model should be the default?")
             .items(&model_items)
+            .filter_mode()
             .interact()
         {
             config.set_goose_provider(&provider_config.name)?;

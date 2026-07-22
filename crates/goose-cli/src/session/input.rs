@@ -35,6 +35,7 @@ pub enum InputResult {
     Edit(Option<String>),
     ListSkills,
     LoadSkills(Vec<String>),
+    ThinkingEffort(Option<String>),
 }
 
 #[derive(Debug)]
@@ -347,6 +348,15 @@ fn handle_slash_command(input: &str) -> Option<InputResult> {
             Some(InputResult::Compact)
         }
         "/r" => Some(InputResult::ToggleFullToolOutput),
+        "/effort" => Some(InputResult::ThinkingEffort(None)),
+        s if s.starts_with("/effort ") => {
+            let effort = s.get("/effort ".len()..).unwrap_or("").trim().to_string();
+            if effort.is_empty() {
+                Some(InputResult::ThinkingEffort(None))
+            } else {
+                Some(InputResult::ThinkingEffort(Some(effort)))
+            }
+        }
         s if s == CMD_EDIT => Some(InputResult::Edit(None)),
         s if s.starts_with(CMD_EDIT_WITH_SPACE) => {
             let prefill = s

@@ -41,6 +41,7 @@ use goose::agents::{Agent, SessionConfig, COMPACT_TRIGGERS};
 use goose::config::extensions::name_to_key;
 use goose::config::providers::get_providers_map;
 use goose::config::{Config, GooseMode};
+use goose_providers::thinking::ThinkingEffort;
 use input::InputResult;
 use rmcp::model::ServerNotification;
 use rmcp::model::{ElicitationAction, PromptMessage};
@@ -645,6 +646,10 @@ impl CliSession {
                 history.save(editor);
                 self.handle_provider(provider.as_deref()).await?;
             }
+            InputResult::ThinkingEffort(effort) => {
+                history.save(editor);
+                self.handle_thinking_effort(effort.as_deref()).await?;
+            }
             InputResult::Plan(options) => {
                 self.handle_plan_mode(options).await?;
             }
@@ -937,6 +942,72 @@ impl CliSession {
             "Session model switched from '{}' to '{}' for provider '{}'",
             current_model_name, model_name, current_provider_name
         ));
+        Ok(())
+    }
+
+    async fn handle_thinking_effort(&self, effort: Option<&str>) -> Result<()> {
+        let provider = self.agent.provider().await?;
+        let provider_name = provider.get_name().to_string();
+        let current_model_config = self
+            .agent
+            .model_config_for_session(&self.session_id)
+            .await?;
+
+        let supports_thinking = match provider
+            .fetch_model_info(&current_model_config.model_name)
+            .await
+        {
+            Ok(model_info) => model_info.reasoning,
+            Err(_) => current_model_config.is_reasoning_model(),
+        };
+
+        if !supports_thinking {
+            output::render_error(&format!(
+                "Thinking effort is not supported for model '{}' with provider '{}'",
+                current_model_config.model_name, provider_name
+            ));
+            return Ok(());
+        }
+
+        let effort_value = match effort {
+            Some(e) => e.to_string(),
+            None => {
+                let current_effort = current_model_config
+                    .thinking_effort()
+                    .map(|e| e.to_string())
+                    .unwrap_or_else(|| "off".to_string());
+                match cliclack::select("Select thinking effort:")
+                    .item("off", "Off - No extended thinking", "")
+                    .item("low", "Low - Better latency, lighter reasoning", "")
+                    .item("medium", "Medium - Moderate thinking", "")
+                    .item("high", "High - Deep reasoning", "")
+                    .item("max", "Max - No constraints on thinking depth", "")
+                    .initial_value(&current_effort)
+                    .interact()
+                {
+                    Ok(selection) => selection.to_string(),
+                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => return Ok(()),
+                    Err(e) => return Err(e.into()),
+                }
+            }
+        };
+
+        let parsed_effort: ThinkingEffort = effort_value.parse().map_err(|_| {
+            anyhow::anyhow!(
+                "Invalid thinking effort '{}'. Valid options: off, low, medium, high, max",
+                effort_value
+            )
+        })?;
+
+        self.agent
+            .update_thinking_effort(&self.session_id, parsed_effort)
+            .await?;
+        output::goose_mode_message(&format!(
+            "Thinking effort set to '{}' for model '{}'",
+            parsed_effort, current_model_config.model_name
+        ));
+
+        Config::global().set_goose_thinking_effort(parsed_effort)?;
         Ok(())
     }
 
