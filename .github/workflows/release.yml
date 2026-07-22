@@ -38,11 +38,13 @@ jobs:
           target: x86_64-unknown-linux-gnu
       - name: Build
         run: cargo build --release -p goose-cli --bin goose
+      - name: Rename binary
+        run: cp target/release/goose target/release/goose-x86_64-unknown-linux-gnu
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
           name: goose-x86_64-unknown-linux-gnu
-          path: target/release/goose
+          path: target/release/goose-x86_64-unknown-linux-gnu
 
   build-aarch64:
     name: Build aarch64 Linux
@@ -55,11 +57,13 @@ jobs:
           target: aarch64-unknown-linux-gnu
       - name: Build
         run: cargo build --release -p goose-cli --bin goose
+      - name: Rename binary
+        run: cp target/release/goose target/release/goose-aarch64-unknown-linux-gnu
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
           name: goose-aarch64-unknown-linux-gnu
-          path: target/release/goose
+          path: target/release/goose-aarch64-unknown-linux-gnu
 
   build-android:
     name: Build aarch64 Android
@@ -85,11 +89,13 @@ jobs:
           cargo build --release --target aarch64-linux-android -p goose-cli --bin goose \
             --no-default-features \
             --features tui,aws-providers,telemetry,otel,rustls-tls,update
+      - name: Rename binary
+        run: cp target/aarch64-linux-android/release/goose target/aarch64-linux-android/release/goose-aarch64-linux-android
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
           name: goose-aarch64-linux-android
-          path: target/aarch64-linux-android/release/goose
+          path: target/aarch64-linux-android/release/goose-aarch64-linux-android
 
   release:
     name: Create Release
