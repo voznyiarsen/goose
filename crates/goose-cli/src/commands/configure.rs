@@ -2353,7 +2353,6 @@ mod tests {
     use super::*;
 
     #[test]
-<<<<<<< HEAD
     fn selected_item_inside_visible_window_keeps_order() {
         let mut items: Vec<_> = (0..MAX_PROVIDER_ROWS + 1).collect();
         let expected = items.clone();

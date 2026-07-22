@@ -88,7 +88,7 @@ jobs:
           export CFLAGS_aarch64_linux_android="-Dindex=strchr -D__USE_MISC"
           cargo build --release --target aarch64-linux-android -p goose-cli --bin goose \
             --no-default-features \
-            --features tui,aws-providers,telemetry,otel,rustls-tls,update
+            --features aws-providers,telemetry,otel,rustls-tls,update
       - name: Rename binary
         run: cp target/aarch64-linux-android/release/goose target/aarch64-linux-android/release/goose-aarch64-linux-android
       - name: Upload binary
