@@ -73,7 +73,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          target: aarch64-linux-android
+          targets: aarch64-linux-android
       - name: Build
         run: |
           export CC_aarch64_linux_android="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang"
